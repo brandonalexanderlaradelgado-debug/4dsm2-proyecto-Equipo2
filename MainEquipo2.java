@@ -161,7 +161,7 @@ public class MainEquipo2 {
                         break;
 
                     case 4:
-                        System.out.println("\nSaliendo del programa. ¡Mucho éxito con el proyecto, bro!");
+                        System.out.println("\nSaliendo del programa");
                         break;
 
                     default:
