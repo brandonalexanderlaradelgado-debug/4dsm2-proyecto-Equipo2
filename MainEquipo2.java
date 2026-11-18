@@ -8,32 +8,7 @@ import java.util.Scanner;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-// ==========================================
-// 1. CLASE MODELO (Pídesela a Dafne Iris)
-// ==========================================
-/* 
- * [AVISO PARA DAFNE]: Pídele que te pase su clase Alumno. 
- * Si te la pasa, puedes borrar o reemplazar esta clase de ejemplo 
- * con la que ella haga. Debe tener atributos: matricula, nombre, grupo, etc.
- */
-class Alumno {
-    private String matricula;
-    private String nombre;
-    private String grupo;
-    private String laboratorio;
 
-    public Alumno(String matricula, String nombre, String grupo, String laboratorio) {
-        this.matricula = matricula;
-        this.nombre = nombre;
-        this.grupo = grupo;
-        this.laboratorio = laboratorio;
-    }
-
-    public String getMatricula() { return matricula; }
-    public String getNombre() { return nombre; }
-    public String getGrupo() { return grupo; }
-    public String getLaboratorio() { return laboratorio; }
-}
 
 
 
@@ -77,8 +52,10 @@ public class MainEquipo2 {
                     String nom = item.optString("nombre");
                     String gru = item.optString("grupo");
                     String lab = item.optString("laboratorio");
+                    String prac = item.optString("practicaId");
+                    String fec = item.optString("fecha");
 
-                    Alumno alum = new Alumno(mat, nom, gru, lab);
+                    Alumno alum = new Alumno(mat, nom, gru, lab, prac, fec);
                     
                     // Guardando en el diccionario por su clave (matrícula)
                     diccionarioInscritos.put(mat, alum);
