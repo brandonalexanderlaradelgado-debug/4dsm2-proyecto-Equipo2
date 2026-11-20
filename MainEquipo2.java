@@ -1,21 +1,22 @@
+import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
-
-
-
-
-
-
 // ==========================================
-// 3. CLASE PRINCIPAL Y MENÚ (TU PARTE, BRANDON)
+// 3. CLASE PRINCIPAL Y MENÚ (BRANDON)
 // ==========================================
 public class MainEquipo2 {
 
@@ -24,13 +25,20 @@ public class MainEquipo2 {
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-        
+
         // Diccionario exigido por el profesor (Clave: Matrícula, Valor: Objeto Alumno)
         Map<String, Alumno> diccionarioInscritos = new HashMap<>();
-        
-        // Instancia de la cola (de Donnovan)
-        ColaEspera<Alumno> colaEquipo = new ColaEspera<>();
-        boolean equipoOcupado = true; // Estado inicial del equipo
+
+        // Estado independiente para cada equipo.
+        Map<String, Equipo> equipos = new HashMap<>();
+        Map<String, ColaEspera<Reservacion>> colasPorEquipo = new HashMap<>();
+        Map<String, Reservacion> reservacionesActivas = new HashMap<>();
+        List<Reservacion> reservacionesRegistradas = new ArrayList<>();
+
+        // Instancia de las reglas de negocio (de Santiago)
+        ValidadorReglas validador = new ValidadorReglas();
+
+        int siguienteIdReservacion = 1;
 
         System.out.println("=== EQUIPO 2: MÓDULO EQUIPO (HU-D04) ===");
         System.out.println("Conectando con el servicio web de inscritos a prácticas...\n");
@@ -55,8 +63,8 @@ public class MainEquipo2 {
                     String prac = item.optString("practicaId");
                     String fec = item.optString("fecha");
 
-                    Alumno alum = new Alumno(mat, nom, gru, lab, prac, fec);
-                    
+                    Alumno alum = new Alumno(mat, nom, gru, prac, lab, fec);
+
                     // Guardando en el diccionario por su clave (matrícula)
                     diccionarioInscritos.put(mat, alum);
                 }
@@ -67,8 +75,11 @@ public class MainEquipo2 {
                 System.out.println("Error en el servidor. Código HTTP: " + response.statusCode());
             }
 
-        } catch (Exception e) {
-            System.out.println("Aviso: No se pudo conectar a la red (" + e.getMessage() + "). Asegúrate de tener internet.");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.out.println("Aviso: Se interrumpió la conexión con el servicio web.");
+        } catch (IOException | JSONException e) {
+            System.out.println("Aviso: No se pudieron cargar los inscritos: " + e.getMessage());
         }
 
         // ==========================================
@@ -91,49 +102,138 @@ public class MainEquipo2 {
 
                 switch (opcion) {
                     case 1:
-                        System.out.println("\n[ESTADO]: El equipo físico se encuentra " + (equipoOcupado ? "OCUPADO" : "LIBRE"));
-                        System.out.println("[COLA]: Alumnos en espera: " + colaEquipo.getTamano());
+                        System.out.print("\nIngresa el ID del equipo que quieres consultar: ");
+                        String idEquipoConsulta = scanner.nextLine().trim();
+                        Equipo equipoConsultado = equipos.get(idEquipoConsulta);
+                        ColaEspera<Reservacion> colaConsulta = colasPorEquipo.get(idEquipoConsulta);
+                        boolean ocupado = equipoConsultado != null && equipoConsultado.isOcupado();
+                        System.out.println("[ESTADO]: El equipo " + idEquipoConsulta + " se encuentra "
+                                + (ocupado ? "OCUPADO" : "LIBRE"));
+                        if (ocupado) {
+                            System.out.println("[ALUMNO ACTUAL]: "
+                                    + equipoConsultado.getAlumnoActual().getNombre());
+                        }
+                        System.out.println("[COLA]: Alumnos en espera: "
+                                + (colaConsulta == null ? 0 : colaConsulta.getTamano()));
+                        if (colaConsulta != null && !colaConsulta.estaVacia()) {
+                            System.out.println(colaConsulta.mostrarCola());
+                        }
                         break;
 
                     case 2:
                         System.out.print("\nIngresa tu matrícula de alumno: ");
                         String matriculaIngresada = scanner.nextLine().trim();
 
-                        // Validar si la matrícula existe en el diccionario del servicio
-                        if (diccionarioInscritos.containsKey(matriculaIngresada)) {
-                            Alumno alumnoEncontrado = diccionarioInscritos.get(matriculaIngresada);
-                            System.out.println("¡Alumno encontrado: " + alumnoEncontrado.getNombre() + "!");
+                        // 1. Validar si la matrícula existe en el diccionario (regla de Santiago)
+                        if (!validador.validarAlumnoInscrito(matriculaIngresada, diccionarioInscritos)) {
+                            break;
+                        }
 
-                            // ----------------------------------------------------
-                            // [INTEGRACIÓN SANTIAGO]: Aquí puedes mandar a llamar 
-                            // sus validaciones de reglas de negocio (RN-D04 / horarios)
-                            // ----------------------------------------------------
-                            
-                            if (equipoOcupado) {
-                                System.out.println("-> El equipo está ocupado. Formando en la cola...");
-                                colaEquipo.encolar(alumnoEncontrado); // Llamada al método de Donnovan
-                            } else {
-                                System.out.println("-> ¡Equipo libre! Se te ha asignado directamente.");
-                                equipoOcupado = true;
+                        Alumno alumnoEncontrado = diccionarioInscritos.get(matriculaIngresada);
+                        System.out.println("¡Alumno encontrado: " + alumnoEncontrado.getNombre() + "!");
+
+                        // 2. Capturar los datos del equipo y de la reservación.
+                        System.out.print("Ingresa el ID del equipo (ej. EQ-01): ");
+                        String idEquipo = scanner.nextLine().trim();
+
+                        System.out.print("Ingresa la fecha (ej. 2026-11-20): ");
+                        String fecha = scanner.nextLine().trim();
+
+                        System.out.print("Ingresa la hora de inicio (ej. 17:00): ");
+                        String horaInicio = scanner.nextLine().trim();
+
+                        System.out.print("Ingresa la hora de fin (ej. 18:00): ");
+                        String horaFin = scanner.nextLine().trim();
+
+                        if (idEquipo.isEmpty() || fecha.isEmpty() || horaInicio.isEmpty()
+                                || horaFin.isEmpty()) {
+                            System.out.println("[Error]: Ingresa datos completos y un horario válido.");
+                            break;
+                        }
+                        try {
+                            LocalDate.parse(fecha);
+                            LocalTime inicio = LocalTime.parse(horaInicio);
+                            LocalTime fin = LocalTime.parse(horaFin);
+                            if (!inicio.isBefore(fin)) {
+                                System.out.println("[Error]: La hora de inicio debe ser anterior a la hora de fin.");
+                                break;
                             }
+                        } catch (DateTimeParseException e) {
+                            System.out.println("[Error]: Usa fecha AAAA-MM-DD y horas HH:mm.");
+                            break;
+                        }
 
+                        Reservacion nuevaReservacion = new Reservacion(
+                                "R-" + siguienteIdReservacion++, idEquipo,
+                                matriculaIngresada, fecha, horaInicio, horaFin);
+                        boolean hayTraslape = false;
+                        for (Reservacion reservacion : reservacionesRegistradas) {
+                            if (nuevaReservacion.seEmpalmaCon(reservacion)) {
+                                hayTraslape = true;
+                                break;
+                            }
+                        }
+                        if (hayTraslape) {
+                            System.out.println("[Error]: El equipo ya tiene una reservación que se empalma con ese horario.");
+                            break;
+                        }
+
+                        Equipo equipo = equipos.get(idEquipo);
+                        if (equipo == null) {
+                            equipo = new Equipo(idEquipo, "Equipo " + idEquipo,
+                                    alumnoEncontrado.getLaboratorio());
+                            equipos.put(idEquipo, equipo);
+                        }
+                        ColaEspera<Reservacion> cola = colasPorEquipo.get(idEquipo);
+                        if (cola == null) {
+                            cola = new ColaEspera<>();
+                            colasPorEquipo.put(idEquipo, cola);
+                        }
+
+                        reservacionesRegistradas.add(nuevaReservacion);
+                        if (equipo.isOcupado()) {
+                            System.out.println("-> El equipo está ocupado. Formando en la cola...");
+                            cola.encolar(nuevaReservacion);
                         } else {
-                            System.out.println("\n[Error]: La matrícula [" + matriculaIngresada + "] no existe en el registro del servicio.");
+                            System.out.println("-> ¡Equipo libre! Se te ha asignado directamente.");
+                            equipo.setOcupado(true);
+                            equipo.setAlumnoActual(alumnoEncontrado);
+                            reservacionesActivas.put(idEquipo, nuevaReservacion);
                         }
                         break;
 
                     case 3:
-                        System.out.println("\n-> Liberando equipo actual...");
-                        if (colaEquipo.estaVacia()) {
-                            equipoOcupado = false;
+                        System.out.print("\nIngresa el ID del equipo que deseas liberar: ");
+                        String idEquipoLiberar = scanner.nextLine().trim();
+                        Equipo equipoLiberar = equipos.get(idEquipoLiberar);
+                        if (equipoLiberar == null || !equipoLiberar.isOcupado()) {
+                            System.out.println("-> Ese equipo ya está libre o no está registrado.");
+                            break;
+                        }
+
+                        Reservacion reservacionTerminada = reservacionesActivas.remove(idEquipoLiberar);
+                        reservacionesRegistradas.remove(reservacionTerminada);
+                        ColaEspera<Reservacion> colaLiberar = colasPorEquipo.get(idEquipoLiberar);
+                        System.out.println("\n-> Liberando equipo " + idEquipoLiberar + "...");
+                        if (colaLiberar == null || colaLiberar.estaVacia()) {
+                            equipoLiberar.setOcupado(false);
+                            equipoLiberar.setAlumnoActual(null);
                             System.out.println("-> El equipo ahora está LIBRE. Ningún alumno estaba formándose.");
                         } else {
-                            // Saca al primero de la cola de Donnovan
-                            Alumno siguienteAlumno = colaEquipo.desencolar();
-                            if (siguienteAlumno != null) {
-                                System.out.println("-> ¡Equipo asignado automáticamente a: " + siguienteAlumno.getNombre() + "!");
+                            Reservacion siguienteReservacion = colaLiberar.desencolar();
+                            Alumno siguienteAlumno = diccionarioInscritos.get(
+                                    siguienteReservacion.getMatriculaAlumno());
+                            if (siguienteAlumno == null) {
+                                System.out.println("[Error]: No se encontró al alumno de la siguiente reservación.");
+                                equipoLiberar.setOcupado(false);
+                                equipoLiberar.setAlumnoActual(null);
+                                reservacionesRegistradas.remove(siguienteReservacion);
+                            } else {
+                                equipoLiberar.setAlumnoActual(siguienteAlumno);
+                                reservacionesActivas.put(idEquipoLiberar, siguienteReservacion);
+                                System.out.println("-> ¡Equipo asignado automáticamente a: "
+                                        + siguienteAlumno.getNombre() + "!");
                             }
-                            equipoOcupado = true;
                         }
                         break;
 

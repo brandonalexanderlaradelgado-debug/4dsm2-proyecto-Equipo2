@@ -1,3 +1,4 @@
+//Código de Iris
 //clase para los datos del equipo
 public class Equipo {
 
