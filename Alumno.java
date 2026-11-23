@@ -44,11 +44,22 @@ public class Alumno {
     public String getFecha() { return fecha; }
     public void setFecha(String fecha) { this.fecha = fecha; }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Alumno alumno = (Alumno) o;
+        return matricula != null && matricula.equals(alumno.matricula);
+    }
+
+    @Override
+    public int hashCode() {
+        return matricula != null ? matricula.hashCode() : 0;
+    }
+
     //el override indica que se subre escribe un metodo 
     @Override
     public String toString() {
-        return "Alumno{matricula='" + matricula + "', nombre='" + nombre
-                + "', grupo='" + grupo + "', practicaId='" + practicaId
-                + "', laboratorio='" + laboratorio + "', fecha='" + fecha + "'}";
+        return "Alumno " + nombre + " (Matrícula: " + matricula + ")";
     }
 }
