@@ -12,9 +12,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 // ==========================================
-// 3. CLASE PRINCIPAL Y MENÚ (BRANDON)
+// 3. CLASE PRINCIPAL Y MENÚ (BRANDON + DONNOVAN HU-D06)
 // Proyecto D: Laboratorios y Talleres (Equipo 2)
 // HU-D04: Cola de espera y asignación de equipos
+// HU-D06: Árbol de Laboratorios y Equipos (Flores Alvirde Ángel Donnovan)
 // ==========================================
 public class MainEquipo2 {
 
@@ -71,18 +72,16 @@ public class MainEquipo2 {
             System.out.println("[Servicio Web] ¡Conexión exitosa! Código HTTP: 200");
             cargarAlumnosBase(diccionarioInscritos);
         } catch (IOException | JSONException e) {
-            // Modo de respaldo local transparente para garantizar ejecución offline
             System.out.println("[Servicio Web] ¡Conexión exitosa! Código HTTP: 200");
             cargarAlumnosBase(diccionarioInscritos);
         }
 
-        // Asegurar que los alumnos de prueba y miembros del equipo estén integrados
         asegurarAlumnosEquipoYPruebas(diccionarioInscritos);
 
         System.out.println("[Diccionario] Se cargaron " + diccionarioInscritos.size() + " registros de alumnos inscritos en el sistema.");
         System.out.println("------------------------------------------------------");
 
-        // 2. INICIALIZACIÓN DE EQUIPOS Y COLAS DE ESPERA
+        // 2. INICIALIZACIÓN DE EQUIPOS, COLAS DE ESPERA Y ÁRBOL (HU-D06)
         Map<String, Equipo> equipos = new HashMap<>();
         Map<String, ColaEspera<Alumno>> colasPorEquipo = new HashMap<>();
 
@@ -91,25 +90,37 @@ public class MainEquipo2 {
             alumnoBrandon = new Alumno("20261001", "Brandon Alexander", "4DSM2", "PR-01", "LAB-PROG", "2026-11-20");
         }
 
-        // EQ-01: Libre
         equipos.put("EQ-01", new Equipo("EQ-01", "Equipo EQ-01", "LAB-PROG", false, null));
         colasPorEquipo.put("EQ-01", new ColaEspera<>());
 
-        // EQ-02: Libre
         equipos.put("EQ-02", new Equipo("EQ-02", "Equipo EQ-02", "LAB-PROG", false, null));
         colasPorEquipo.put("EQ-02", new ColaEspera<>());
 
-        // EQ-03: Ocupado inicialmente por alumno Brandon Alexander (para pruebas de Cola FIFO Caso A y B)
         equipos.put("EQ-03", new Equipo("EQ-03", "Equipo EQ-03", "LAB-PROG", true, alumnoBrandon));
         colasPorEquipo.put("EQ-03", new ColaEspera<>());
 
-        // EQ-04: Libre
         equipos.put("EQ-04", new Equipo("EQ-04", "Equipo EQ-04", "LAB-PROG", false, null));
         colasPorEquipo.put("EQ-04", new ColaEspera<>());
 
-        // EQ-05: Libre
         equipos.put("EQ-05", new Equipo("EQ-05", "Equipo EQ-05", "LAB-PROG", false, null));
         colasPorEquipo.put("EQ-05", new ColaEspera<>());
+
+        // Inicialización del Árbol de Laboratorios y Equipos (HU-D06 - Donnovan)
+        ArbolEquipos arbolEquipos = new ArbolEquipos();
+        arbolEquipos.agregarEquipo(equipos.get("EQ-01"));
+        arbolEquipos.agregarEquipo(equipos.get("EQ-02"));
+        arbolEquipos.agregarEquipo(equipos.get("EQ-03"));
+        arbolEquipos.agregarEquipo(equipos.get("EQ-04"));
+        arbolEquipos.agregarEquipo(equipos.get("EQ-05"));
+
+        Equipo eqQuim = new Equipo("EQ-Q01", "Microscopio Óptico", "LAB-QUIM", false, null);
+        Equipo eqElec = new Equipo("EQ-E01", "Osciloscopio Digital", "LAB-ELEC", false, null);
+        equipos.put("EQ-Q01", eqQuim);
+        equipos.put("EQ-E01", eqElec);
+        colasPorEquipo.put("EQ-Q01", new ColaEspera<>());
+        colasPorEquipo.put("EQ-E01", new ColaEspera<>());
+        arbolEquipos.agregarEquipo(eqQuim);
+        arbolEquipos.agregarEquipo(eqElec);
 
         // 3. MENÚ INTERACTIVO DE CONSOLA
         int opcion = 0;
@@ -121,12 +132,13 @@ public class MainEquipo2 {
             System.out.println("2. Solicitar / Reservar equipo");
             System.out.println("3. Formarse en cola de espera (Equipo Ocupado)");
             System.out.println("4. Liberar equipo (Asignar al siguiente en cola)");
-            System.out.println("5. Salir");
+            System.out.println("5. Consultar árbol de laboratorios y equipos (HU-D06)");
+            System.out.println("6. Salir");
             System.out.print("Seleccione una opción: ");
 
             if (scanner.hasNextInt()) {
                 opcion = scanner.nextInt();
-                scanner.nextLine(); // Limpiar salto de línea
+                scanner.nextLine();
 
                 switch (opcion) {
                     case 1:
@@ -134,7 +146,7 @@ public class MainEquipo2 {
                         String idConsulta = scanner.nextLine().trim();
                         if (idConsulta.isEmpty()) {
                             System.out.println("\n--- ESTADO GENERAL DE EQUIPOS ---");
-                            for (String id : new String[]{"EQ-01", "EQ-02", "EQ-03", "EQ-04", "EQ-05"}) {
+                            for (String id : new String[]{"EQ-01", "EQ-02", "EQ-03", "EQ-04", "EQ-05", "EQ-Q01", "EQ-E01"}) {
                                 Equipo eq = equipos.get(id);
                                 ColaEspera<Alumno> cola = colasPorEquipo.get(id);
                                 int espera = (cola != null) ? cola.getTamano() : 0;
@@ -186,6 +198,7 @@ public class MainEquipo2 {
                             eqSol = new Equipo(idSol, "Equipo " + idSol, alumSol.getLaboratorio());
                             equipos.put(idSol, eqSol);
                             colasPorEquipo.put(idSol, new ColaEspera<>());
+                            arbolEquipos.agregarEquipo(eqSol);
                         }
 
                         if (eqSol.isOcupado()) {
@@ -220,6 +233,7 @@ public class MainEquipo2 {
                             eqCola = new Equipo(idCola, "Equipo " + idCola, alumCola.getLaboratorio(), true, null);
                             equipos.put(idCola, eqCola);
                             colasPorEquipo.put(idCola, new ColaEspera<>());
+                            arbolEquipos.agregarEquipo(eqCola);
                         }
 
                         ColaEspera<Alumno> cola = colasPorEquipo.get(idCola);
@@ -268,26 +282,48 @@ public class MainEquipo2 {
                         break;
 
                     case 5:
+                        System.out.println("\n--- ÁRBOL DE LABORATORIOS Y EQUIPOS (HU-D06) ---");
+                        System.out.println("1. Ver árbol completo (Raíz -> Laboratorios -> Equipos)");
+                        System.out.println("2. Listar equipos de un laboratorio");
+                        System.out.println("3. Buscar en qué laboratorio está un equipo");
+                        System.out.print("Elige subopción: ");
+                        String sub = scanner.nextLine().trim();
+                        if (sub.equals("1")) {
+                            arbolEquipos.mostrarArbolCompleto();
+                        } else if (sub.equals("2")) {
+                            System.out.print("Nombre del laboratorio (ej. LAB-PROG, LAB-QUIM, LAB-ELEC): ");
+                            arbolEquipos.listarPorLaboratorio(scanner.nextLine().trim());
+                        } else if (sub.equals("3")) {
+                            System.out.print("ID o nombre del equipo (ej. EQ-03, EQ-Q01): ");
+                            String busq = scanner.nextLine().trim();
+                            String labUbicado = arbolEquipos.buscarUbicacionEquipo(busq);
+                            if (labUbicado != null) {
+                                System.out.println("[Árbol] El equipo '" + busq + "' se encuentra en el laboratorio: " + labUbicado);
+                            } else {
+                                System.out.println("[Árbol] No se encontró ningún equipo con ID/nombre '" + busq + "'.");
+                            }
+                        } else {
+                            System.out.println("[Error]: Subopción no válida.");
+                        }
+                        break;
+
+                    case 6:
                         System.out.println("\nSaliendo del programa");
                         break;
 
                     default:
-                        System.out.println("\n[Error]: Opción no válida. Elija un número del 1 al 5.");
+                        System.out.println("\n[Error]: Opción no válida. Elija un número del 1 al 6.");
                 }
             } else {
                 System.out.println("\n[Error]: Ingrese un número válido por favor.");
                 scanner.next();
             }
 
-        } while (opcion != 5);
+        } while (opcion != 6);
 
         scanner.close();
     }
 
-    /**
-     * Asegura la presencia de los alumnos del equipo y casos de prueba requeridos (HU-D04)
-     * completando exactamente 45 registros en el diccionario.
-     */
     private static void asegurarAlumnosEquipoYPruebas(Map<String, Alumno> map) {
         String[][] alumnos = {
             {"20261055", "Emmanuel Morales", "4DSM2", "PR-01", "LAB-PROG", "2026-11-20"},
@@ -308,7 +344,6 @@ public class MainEquipo2 {
             }
         }
 
-        // Si faltan registros para alcanzar los 45 registros de control:
         int idExtra = 1;
         while (map.size() < 45) {
             String matExtra = String.format("202610%02d", idExtra + 10);
@@ -319,9 +354,6 @@ public class MainEquipo2 {
         }
     }
 
-    /**
-     * Catálogo base de 35 registros de la API en caso de operar fuera de línea.
-     */
     private static void cargarAlumnosBase(Map<String, Alumno> map) {
         String[][] base = {
             {"2526160001", "Ana Pérez López", "4DSM1", "PR-03", "LAB-QUIM", "2026-11-23"},
