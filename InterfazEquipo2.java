@@ -84,9 +84,9 @@ public class InterfazEquipo2 extends JFrame {
         pestanas.setBackground(COLOR_FONDO);
         pestanas.setBorder(new EmptyBorder(10, 14, 14, 14));
 
-        pestanas.addTab("1. Consultar Estado", crearPanelConsultaEstado());
-        pestanas.addTab("2-4. Solicitar / Cola / Liberar", crearPanelOperacionesEquipo());
-        pestanas.addTab("5. Árbol Labs (HU-D06)", crearPanelArbol());
+        pestanas.addTab("Consultar Estado", crearPanelConsultaEstado());
+        pestanas.addTab("Solicitar / Cola / Liberar", crearPanelOperacionesEquipo());
+        pestanas.addTab("Árbol Labs (HU-D06)", crearPanelArbol());
         pestanas.addTab("Reservaciones (HU-D05)", crearPanelReservaciones());
 
         add(pestanas, BorderLayout.CENTER);
@@ -102,11 +102,11 @@ public class InterfazEquipo2 extends JFrame {
         header.setBackground(COLOR_PRIMARIO);
         header.setBorder(new EmptyBorder(16, 22, 16, 22));
 
-        JLabel titulo = new JLabel("MÓDULO DE EQUIPOS - LABORATORIO");
+        JLabel titulo = new JLabel("EQUIPOS DE LABORATORIO");
         titulo.setForeground(Color.WHITE);
         titulo.setFont(new Font("Segoe UI", Font.BOLD, 19));
 
-        JLabel subtitulo = new JLabel("Proyecto D · Grupo 4DSM2 · Equipo 2 (Sprint 2) · Inscritos: " + diccionarioInscritos.size());
+        JLabel subtitulo = new JLabel("Solicita un equipo para usarlo " + diccionarioInscritos.size());
         subtitulo.setForeground(new Color(191, 219, 254));
         subtitulo.setFont(new Font("Segoe UI", Font.PLAIN, 13));
 
