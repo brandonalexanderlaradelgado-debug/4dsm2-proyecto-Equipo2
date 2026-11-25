@@ -25,7 +25,7 @@ public class MainEquipo2 {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
 
-        // Diccionario exigido por el profesor (Clave: Matrícula, Valor: Objeto Alumno)
+        // Diccionario de datos(Clave: Matrícula, Valor: Objeto Alumno)
         Map<String, Alumno> diccionarioInscritos = new HashMap<>();
 
         // Instancia de las reglas de negocio (Santiago)
