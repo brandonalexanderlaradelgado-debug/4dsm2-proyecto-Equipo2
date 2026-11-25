@@ -48,11 +48,16 @@ public class Reservacion {
        3. Si son fechas distintas, no chocan.
        4. Si es mismo equipo y fecha, revisa que los horarios no se crucen (devuelve true si hay empalme). */
     public boolean seEmpalmaCon(Reservacion otra) {
-        if (otra == null || this.idEquipo == null || this.fecha == null) return false;
-        if (!this.idEquipo.equals(otra.idEquipo)) return false;
-        if (!this.fecha.equals(otra.fecha)) return false;
-        return this.horaInicio.compareTo(otra.horaFin) < 0
-                && otra.horaInicio.compareTo(this.horaFin) < 0;
+        if (otra == null || this.idEquipo == null || this.fecha == null
+                || this.horaInicio == null || this.horaFin == null
+                || otra.idEquipo == null || otra.fecha == null
+                || otra.horaInicio == null || otra.horaFin == null) {
+            return false;
+        }
+        if (!this.idEquipo.trim().equalsIgnoreCase(otra.idEquipo.trim())) return false;
+        if (!this.fecha.trim().equals(otra.fecha.trim())) return false;
+        return this.horaInicio.trim().compareTo(otra.horaFin.trim()) < 0
+                && otra.horaInicio.trim().compareTo(this.horaFin.trim()) < 0;
     }
 
     // Sirve para poder sobrescribir y el return último ya da los datos si cumplió todos los requisitos

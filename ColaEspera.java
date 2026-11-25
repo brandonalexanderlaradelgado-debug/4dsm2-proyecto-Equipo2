@@ -99,6 +99,10 @@
         return tamano;
     }
 
+    public int tamanio() {
+        return tamano;
+    }
+
     /*
     Devuelve una representación en texto del estado actual de la cola
     (del frente hacia el final) para mostrar en consola.

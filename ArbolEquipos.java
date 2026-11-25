@@ -20,21 +20,44 @@ public class ArbolEquipos {
         return raiz;
     }
 
-    // Busca un nodo de laboratorio bajo la raíz; si no existe, devuelve null
-    private NodoArbol buscarNodoLaboratorio(String nombreLab) {
-        if (nombreLab == null) return null;
+    // Busca un nodo de laboratorio bajo la raíz por clave exacta, alias ("Lab 1", "1") o coincidencia
+    public NodoArbol buscarNodoLaboratorio(String nombreLab) {
+        if (nombreLab == null || nombreLab.trim().isEmpty()) return null;
+        String busq = nombreLab.trim();
+
+        // 1. Coincidencia exacta o por índice (Lab 1, 1, etc.)
         NodoArbol labActual = raiz.getPrimerHijo();
+        int index = 1;
         while (labActual != null) {
-            if (labActual.getNombreClave().equalsIgnoreCase(nombreLab.trim())) {
+            String clave = labActual.getNombreClave();
+            if (clave != null) {
+                if (clave.equalsIgnoreCase(busq)
+                        || busq.equalsIgnoreCase("Lab " + index)
+                        || busq.equalsIgnoreCase("Lab" + index)
+                        || busq.equals(String.valueOf(index))) {
+                    return labActual;
+                }
+            }
+            labActual = labActual.getSiguienteHermano();
+            index++;
+        }
+
+        // 2. Coincidencia parcial por texto
+        labActual = raiz.getPrimerHijo();
+        while (labActual != null) {
+            String clave = labActual.getNombreClave();
+            if (clave != null && clave.toUpperCase().contains(busq.toUpperCase())) {
                 return labActual;
             }
             labActual = labActual.getSiguienteHermano();
         }
+
         return null;
     }
 
     // Inserta un laboratorio bajo la raíz si aún no existe
     public NodoArbol agregarLaboratorio(String nombreLab) {
+        if (nombreLab == null || nombreLab.trim().isEmpty()) return null;
         NodoArbol existente = buscarNodoLaboratorio(nombreLab);
         if (existente != null) {
             return existente;
@@ -56,8 +79,11 @@ public class ArbolEquipos {
         }
 
         NodoArbol nodoLab = agregarLaboratorio(equipo.getLaboratorio());
-        nodoLab.agregarHijo(new NodoArbol(equipo));
-        return true;
+        if (nodoLab != null) {
+            nodoLab.agregarHijo(new NodoArbol(equipo));
+            return true;
+        }
+        return false;
     }
 
     public Equipo buscarEquipoPorId(String idEquipo) {
@@ -65,11 +91,12 @@ public class ArbolEquipos {
             return null;
         }
 
+        String buscado = idEquipo.trim();
         NodoArbol labActual = raiz.getPrimerHijo();
         while (labActual != null) {
             NodoArbol equipoActual = labActual.getPrimerHijo();
             while (equipoActual != null) {
-                if (equipoActual.getNombreClave().equalsIgnoreCase(idEquipo.trim())) {
+                if (equipoActual.getNombreClave() != null && equipoActual.getNombreClave().equalsIgnoreCase(buscado)) {
                     return equipoActual.getEquipo();
                 }
                 equipoActual = equipoActual.getSiguienteHermano();
@@ -85,7 +112,9 @@ public class ArbolEquipos {
         while (labActual != null) {
             NodoArbol equipoActual = labActual.getPrimerHijo();
             while (equipoActual != null) {
-                equipos.add(equipoActual.getEquipo());
+                if (equipoActual.getEquipo() != null) {
+                    equipos.add(equipoActual.getEquipo());
+                }
                 equipoActual = equipoActual.getSiguienteHermano();
             }
             labActual = labActual.getSiguienteHermano();
@@ -93,11 +122,23 @@ public class ArbolEquipos {
         return equipos;
     }
 
+    public List<String> obtenerLaboratorios() {
+        List<String> labs = new ArrayList<>();
+        NodoArbol labActual = raiz.getPrimerHijo();
+        while (labActual != null) {
+            if (labActual.getNombreClave() != null) {
+                labs.add(labActual.getNombreClave());
+            }
+            labActual = labActual.getSiguienteHermano();
+        }
+        return labs;
+    }
+
     // Criterio 1 HU-D06: Listar todo el equipo de un laboratorio específico
     public void listarPorLaboratorio(String nombreLab) {
         NodoArbol nodoLab = buscarNodoLaboratorio(nombreLab);
         if (nodoLab == null) {
-            System.out.println("\n[Árbol] El laboratorio '" + nombreLab + "' no está registrado.");
+            System.out.println("\n[Árbol] El laboratorio '" + nombreLab + "' no se encuentra registrado.");
             return;
         }
 
@@ -111,10 +152,15 @@ public class ArbolEquipos {
         int contador = 0;
         while (eqActual != null) {
             Equipo eq = eqActual.getEquipo();
-            String estado = eq.isOcupado() ? "OCUPADO" : "LIBRE";
-            System.out.println("  ├── [" + eq.getIdEquipo() + "] " + eq.getNombre() + " | Estado: " + estado);
+            if (eq != null) {
+                String estado = eq.isOcupado() ? "OCUPADO" : "LIBRE";
+                String alumno = (eq.isOcupado() && eq.getAlumnoActual() != null)
+                        ? " [Asignado a: " + eq.getAlumnoActual().getNombre() + " (" + eq.getAlumnoActual().getMatricula() + ")]"
+                        : "";
+                System.out.println("  ├── [" + eq.getIdEquipo() + "] " + eq.getNombre() + " | Estado: " + estado + alumno);
+                contador++;
+            }
             eqActual = eqActual.getSiguienteHermano();
-            contador++;
         }
         System.out.println("Total de equipos en " + nodoLab.getNombreClave() + ": " + contador);
     }
@@ -131,8 +177,11 @@ public class ArbolEquipos {
             NodoArbol eqActual = labActual.getPrimerHijo();
             while (eqActual != null) {
                 Equipo eq = eqActual.getEquipo();
-                if (eq.getIdEquipo().equalsIgnoreCase(buscado) || eq.getNombre().equalsIgnoreCase(buscado)) {
-                    return labActual.getNombreClave();
+                if (eq != null) {
+                    if ((eq.getIdEquipo() != null && eq.getIdEquipo().equalsIgnoreCase(buscado))
+                            || (eq.getNombre() != null && eq.getNombre().equalsIgnoreCase(buscado))) {
+                        return labActual.getNombreClave();
+                    }
                 }
                 eqActual = eqActual.getSiguienteHermano();
             }
@@ -157,8 +206,10 @@ public class ArbolEquipos {
             NodoArbol eqActual = labActual.getPrimerHijo();
             while (eqActual != null) {
                 Equipo eq = eqActual.getEquipo();
-                String estado = eq.isOcupado() ? "OCUPADO" : "LIBRE";
-                System.out.println("        ├── [" + eq.getIdEquipo() + "] " + eq.getNombre() + " (" + estado + ")");
+                if (eq != null) {
+                    String estado = eq.isOcupado() ? "OCUPADO" : "LIBRE";
+                    System.out.println("        ├── [" + eq.getIdEquipo() + "] " + eq.getNombre() + " (" + estado + ")");
+                }
                 eqActual = eqActual.getSiguienteHermano();
             }
             labActual = labActual.getSiguienteHermano();

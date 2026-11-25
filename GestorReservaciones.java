@@ -17,13 +17,24 @@ public class GestorReservaciones {
      */
     public boolean registrarReservacion(Reservacion nueva) {
         if (nueva == null) {
+            System.out.println("[Error]: La reservación no puede ser nula.");
+            return false;
+        }
+
+        if (nueva.getHoraInicio() == null || nueva.getHoraFin() == null
+                || nueva.getHoraInicio().compareTo(nueva.getHoraFin()) >= 0) {
+            System.out.println("Error: La hora de inicio (" + nueva.getHoraInicio()
+                    + ") debe ser anterior a la hora de fin (" + nueva.getHoraFin() + ").");
             return false;
         }
 
         for (Reservacion actual : reservaciones) {
             if (nueva.seEmpalmaCon(actual)) {
-                System.out.println("Error [RN-D04]: El equipo " + nueva.getIdEquipo()
+                System.out.println("\n❌ Conflicto [RN-D04]: El equipo " + nueva.getIdEquipo()
                         + " ya está reservado el " + nueva.getFecha() + " durante ese horario.");
+                System.out.println("   (Empalma con reservación " + actual.getIdReservacion()
+                        + ": " + actual.getHoraInicio() + " - " + actual.getHoraFin()
+                        + " por matrícula " + actual.getMatriculaAlumno() + ")");
                 return false;
             }
         }
@@ -34,7 +45,7 @@ public class GestorReservaciones {
     }
 
     /**
-     * Algoritmo de ordenamiento por inserción (sin Collections.sort ni Arrays.sort).
+     * Algoritmo de ordenamiento por inserción propio (sin Collections.sort ni Arrays.sort).
      * Ordena ascendentemente por fecha (AAAA-MM-DD) y luego por hora (HH:MM).
      */
     public void ordenarPorFechaHora() {
@@ -51,10 +62,12 @@ public class GestorReservaciones {
     }
 
     private int compararCronologicamente(Reservacion a, Reservacion b) {
+        if (a.getFecha() == null || b.getFecha() == null) return 0;
         int cmpFecha = a.getFecha().compareTo(b.getFecha());
         if (cmpFecha != 0) {
             return cmpFecha;
         }
+        if (a.getHoraInicio() == null || b.getHoraInicio() == null) return 0;
         return a.getHoraInicio().compareTo(b.getHoraInicio());
     }
 
@@ -63,27 +76,32 @@ public class GestorReservaciones {
         return reservaciones;
     }
 
+    public Reservacion buscarReservacionPorId(String idRes) {
+        if (idRes == null || idRes.trim().isEmpty()) return null;
+        String buscado = idRes.trim();
+        for (Reservacion r : reservaciones) {
+            if (r.getIdReservacion() != null && r.getIdReservacion().equalsIgnoreCase(buscado)) {
+                return r;
+            }
+        }
+        return null;
+    }
+
     public void mostrarReservaciones() {
         ordenarPorFechaHora();
         if (reservaciones.isEmpty()) {
-            System.out.println("No hay reservaciones registradas.");
+            System.out.println("\nNo hay reservaciones registradas en el sistema.");
             return;
         }
-        System.out.println("=== RESERVACIONES ORDENADAS POR FECHA Y HORA ===");
+        System.out.println("\n=== RESERVACIONES ORDENADAS POR FECHA Y HORA (INSERCIÓN) ===");
+        int idx = 1;
         for (Reservacion r : reservaciones) {
-            System.out.println(r);
+            System.out.println("  " + idx + ". [" + r.getIdReservacion() + "] Equipo: " + r.getIdEquipo()
+                    + " | Matrícula: " + r.getMatriculaAlumno()
+                    + " | Fecha: " + r.getFecha()
+                    + " | Horario: " + r.getHoraInicio() + " - " + r.getHoraFin());
+            idx++;
         }
-    }
-
-    // Prueba rápida independiente (borra o comenta main al integrar con el menú principal)
-    public static void main(String[] args) {
-        GestorReservaciones gestor = new GestorReservaciones();
-
-        gestor.registrarReservacion(new Reservacion("RES-01", "EQ-02", "2526160011", "2026-11-25", "10:00", "11:00"));
-        gestor.registrarReservacion(new Reservacion("RES-02", "EQ-01", "2526160012", "2026-11-25", "08:00", "09:00"));
-        gestor.registrarReservacion(new Reservacion("RES-03", "EQ-02", "2526160013", "2026-11-25", "10:30", "11:30")); // Debe fallar por RN-D04
-        gestor.registrarReservacion(new Reservacion("RES-04", "EQ-02", "2526160014", "2026-11-24", "14:00", "15:00"));
-
-        gestor.mostrarReservaciones();
+        System.out.println("Total de reservaciones activas: " + reservaciones.size());
     }
 }
