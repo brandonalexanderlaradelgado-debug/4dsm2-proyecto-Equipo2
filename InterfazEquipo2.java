@@ -1,19 +1,28 @@
 // Equipo 2 - Módulo: Equipo (4DSM2 - Sprint 2)
 // Interfaz Gráfica Swing con las mismas opciones del menú de MainEquipo2
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
 import java.awt.*;
+import java.awt.Desktop;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
@@ -23,6 +32,8 @@ import javax.swing.table.JTableHeader;
 import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeCellRenderer;
 import javax.swing.tree.DefaultTreeModel;
+import org.json.JSONArray;
+import org.json.JSONObject;
 
 public class InterfazEquipo2 extends JFrame {
 
@@ -34,15 +45,21 @@ public class InterfazEquipo2 extends JFrame {
     private static final Color COLOR_TARJETA = Color.WHITE;
     private static final Color COLOR_BORDE = new Color(203, 213, 225);
     private static final Color COLOR_TEXTO = new Color(15, 23, 42);
+    private static final int PUERTO_HTTP = 8080;
 
     private static final String URL_SERVICIO = "https://servicios-proyecto-ed.vercel.app/api/v1/inscritos_practicas";
-    private static final String[] IDS_BASE = {"EQ-01", "EQ-02", "EQ-03", "EQ-04", "EQ-05", "EQ-Q01", "EQ-E01"};
+    private static final String[] IDS_BASE = {"EQ-01", "EQ-02", "EQ-03", "EQ-04", "EQ-05", "EQ-Q01", "EQ-E01", "EQ-R01", "EQ-M01"};
+
+    private static HttpServer servidorHttp = null;
 
     private final Map<String, Alumno> diccionarioInscritos = new LinkedHashMap<>();
     private final Map<String, Equipo> equipos = new HashMap<>();
     private final Map<String, ColaEspera<Alumno>> colasPorEquipo = new HashMap<>();
     private final ArbolEquipos arbolEquipos = new ArbolEquipos();
-    private final List<ReservacionRegistro> reservaciones = new ArrayList<>();
+    private final GestorReservaciones gestorReservaciones = new GestorReservaciones();
+
+    // Endpoints (:8080)
+    private JLabel lblEstadoServidor;
 
     private JTabbedPane pestanas;
 
@@ -63,7 +80,7 @@ public class InterfazEquipo2 extends JFrame {
 
     // Agenda / Reservaciones ordenadas (HU-D05 + RN-D04)
     private JComboBox<String> comboEquiposRes;
-    private JTextField txtMatriculaRes, txtFechaRes, txtHoraRes;
+    private JTextField txtMatriculaRes, txtFechaRes, txtHoraRes, txtHoraFinRes;
     private DefaultTableModel modeloTablaRes;
 
     public InterfazEquipo2() {
@@ -88,6 +105,7 @@ public class InterfazEquipo2 extends JFrame {
         pestanas.addTab("2-4. Solicitar / Cola / Liberar", crearPanelOperacionesEquipo());
         pestanas.addTab("5. Árbol Labs (HU-D06)", crearPanelArbol());
         pestanas.addTab("Reservaciones (HU-D05)", crearPanelReservaciones());
+        pestanas.addTab("8. Endpoints (:8080)", crearPanelEndpoints());
 
         add(pestanas, BorderLayout.CENTER);
 
@@ -95,6 +113,9 @@ public class InterfazEquipo2 extends JFrame {
         consultarEstadoEquipos("");
         actualizarVistaArbol();
         refrescarTablaReservaciones();
+
+        // Iniciar servidor HTTP igual que MainEquipo2 (opción 8)
+        iniciarEndpointsLocales(PUERTO_HTTP);
     }
 
     private JPanel crearEncabezado() {
@@ -169,6 +190,13 @@ public class InterfazEquipo2 extends JFrame {
         registrarEquipoEnSistema(new Equipo("EQ-05", "Equipo EQ-05", "LAB-PROG", false, null));
         registrarEquipoEnSistema(new Equipo("EQ-Q01", "Microscopio Óptico", "LAB-QUIM", false, null));
         registrarEquipoEnSistema(new Equipo("EQ-E01", "Osciloscopio Digital", "LAB-ELEC", false, null));
+        registrarEquipoEnSistema(new Equipo("EQ-R01", "Switch Cisco 2960", "LAB-REDES", false, null));
+        registrarEquipoEnSistema(new Equipo("EQ-M01", "Torno CNC", "TALLER-MEC", false, null));
+
+        // Cargar reservaciones iniciales igual que MainEquipo2.inicializarReservaciones()
+        gestorReservaciones.registrarReservacion(new Reservacion("RES-01", "EQ-02", "20261001", "2026-11-25", "10:00", "11:00"));
+        gestorReservaciones.registrarReservacion(new Reservacion("RES-02", "EQ-01", "20261002", "2026-11-25", "08:00", "09:00"));
+        gestorReservaciones.registrarReservacion(new Reservacion("RES-03", "EQ-02", "20261003", "2026-11-24", "14:00", "15:00"));
     }
 
     private void registrarEquipoEnSistema(Equipo eq) {
@@ -639,7 +667,7 @@ public class InterfazEquipo2 extends JFrame {
         contenedor.setBorder(new EmptyBorder(12, 8, 8, 8));
 
         JPanel cardForm = crearTarjeta("Reservaciones Ordenadas por Fecha y Hora (RN-D04)");
-        JPanel form = new JPanel(new GridLayout(2, 5, 10, 8));
+        JPanel form = new JPanel(new GridLayout(2, 6, 10, 8));
         form.setOpaque(false);
 
         comboEquiposRes = new JComboBox<>();
@@ -649,24 +677,28 @@ public class InterfazEquipo2 extends JFrame {
         txtFechaRes.setText("2026-11-25");
         txtHoraRes = crearInput();
         txtHoraRes.setText("10:00");
+        txtHoraFinRes = crearInput();
+        txtHoraFinRes.setText("11:00");
         JButton btnReservar = crearBoton("Registrar y Ordenar", COLOR_EXITO);
 
         form.add(crearEtiqueta("Equipo:"));
         form.add(crearEtiqueta("Matrícula Alumno:"));
         form.add(crearEtiqueta("Fecha (AAAA-MM-DD):"));
-        form.add(crearEtiqueta("Hora (HH:MM):"));
+        form.add(crearEtiqueta("Hora Inicio (HH:MM):"));
+        form.add(crearEtiqueta("Hora Fin (HH:MM):"));
         form.add(new JLabel());
 
         form.add(comboEquiposRes);
         form.add(txtMatriculaRes);
         form.add(txtFechaRes);
         form.add(txtHoraRes);
+        form.add(txtHoraFinRes);
         form.add(btnReservar);
 
         cardForm.add(form, BorderLayout.CENTER);
 
         JPanel cardTabla = crearTarjeta("Reservaciones Ordenadas");
-        String[] columnas = {"Equipo", "Matrícula", "Alumno", "Fecha", "Hora"};
+        String[] columnas = {"ID", "Equipo", "Matrícula", "Alumno", "Fecha", "Hora Inicio", "Hora Fin"};
         modeloTablaRes = new DefaultTableModel(columnas, 0) {
             @Override
             public boolean isCellEditable(int row, int column) { return false; }
@@ -697,28 +729,34 @@ public class InterfazEquipo2 extends JFrame {
             String idEq = selEq.split(" - ")[0].trim();
 
             String fecha = txtFechaRes.getText().trim();
-            String hora = txtHoraRes.getText().trim();
-            if (fecha.isEmpty() || hora.isEmpty()) {
-                JOptionPane.showMessageDialog(this, "Completa fecha y hora.", "Datos incompletos", JOptionPane.WARNING_MESSAGE);
+            String horaInicio = txtHoraRes.getText().trim();
+            String horaFin = txtHoraFinRes.getText().trim();
+            if (fecha.isEmpty() || horaInicio.isEmpty() || horaFin.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Completa fecha, hora de inicio y hora de fin.", "Datos incompletos", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            if (horaInicio.compareTo(horaFin) >= 0) {
+                JOptionPane.showMessageDialog(this,
+                        "[Error]: La hora de inicio (" + horaInicio + ") debe ser anterior a la hora de fin (" + horaFin + ").",
+                        "Horario inválido", JOptionPane.WARNING_MESSAGE);
                 return;
             }
 
-            for (ReservacionRegistro actual : reservaciones) {
-                if (actual.idEquipo.equalsIgnoreCase(idEq)
-                        && actual.fecha.equals(fecha)
-                        && actual.hora.equals(hora)) {
-                    JOptionPane.showMessageDialog(this,
-                            "Error [RN-D04]: El equipo " + idEq + " ya está reservado el " + fecha + " a las " + hora + ".",
-                            "Empalme RN-D04", JOptionPane.ERROR_MESSAGE);
-                    return;
-                }
-            }
+            String idRes = "RES-" + (gestorReservaciones.getReservacionesOrdenadas().size() + 1);
+            Reservacion nueva = new Reservacion(idRes, idEq, mat, fecha, horaInicio, horaFin);
 
-            reservaciones.add(new ReservacionRegistro(idEq, mat, fecha, hora));
-            ordenarReservacionesPorInsercion();
-            refrescarTablaReservaciones();
-            txtMatriculaRes.setText("");
-            JOptionPane.showMessageDialog(this, "Reservación registrada y ordenada cronológicamente.");
+            // Aplica validación RN-D04 real (detecta empalme de rangos de horario)
+            boolean registrada = gestorReservaciones.registrarReservacion(nueva);
+            if (registrada) {
+                refrescarTablaReservaciones();
+                txtMatriculaRes.setText("");
+                JOptionPane.showMessageDialog(this, "✅ ¡Éxito! Reservación " + idRes + " guardada y agenda ordenada cronológicamente.");
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "❌ Conflicto [RN-D04]: El equipo " + idEq + " ya tiene una reservación que se empalma\n"
+                        + "con el horario " + horaInicio + " - " + horaFin + " el " + fecha + ".",
+                        "Empalme RN-D04", JOptionPane.ERROR_MESSAGE);
+            }
         });
 
         cardTabla.add(new JScrollPane(tabla), BorderLayout.CENTER);
@@ -728,30 +766,22 @@ public class InterfazEquipo2 extends JFrame {
         return contenedor;
     }
 
-    private void ordenarReservacionesPorInsercion() {
-        for (int i = 1; i < reservaciones.size(); i++) {
-            ReservacionRegistro actual = reservaciones.get(i);
-            int j = i - 1;
-            while (j >= 0 && compararCronologicamente(reservaciones.get(j), actual) > 0) {
-                reservaciones.set(j + 1, reservaciones.get(j));
-                j--;
-            }
-            reservaciones.set(j + 1, actual);
-        }
-    }
 
-    private int compararCronologicamente(ReservacionRegistro a, ReservacionRegistro b) {
-        int cmpFecha = a.fecha.compareTo(b.fecha);
-        if (cmpFecha != 0) return cmpFecha;
-        return a.hora.compareTo(b.hora);
-    }
 
     private void refrescarTablaReservaciones() {
         modeloTablaRes.setRowCount(0);
-        for (ReservacionRegistro r : reservaciones) {
-            Alumno al = diccionarioInscritos.get(r.matricula);
-            String nombre = al != null ? al.getNombre() : r.matricula;
-            modeloTablaRes.addRow(new Object[]{r.idEquipo, r.matricula, nombre, r.fecha, r.hora});
+        for (Reservacion r : gestorReservaciones.getReservacionesOrdenadas()) {
+            Alumno al = diccionarioInscritos.get(r.getMatriculaAlumno());
+            String nombre = al != null ? al.getNombre() : r.getMatriculaAlumno();
+            modeloTablaRes.addRow(new Object[]{
+                r.getIdReservacion(),
+                r.getIdEquipo(),
+                r.getMatriculaAlumno(),
+                nombre,
+                r.getFecha(),
+                r.getHoraInicio(),
+                r.getHoraFin()
+            });
         }
     }
 
@@ -951,18 +981,299 @@ public class InterfazEquipo2 extends JFrame {
         return btn;
     }
 
-    private static class ReservacionRegistro {
-        final String idEquipo;
-        final String matricula;
-        final String fecha;
-        final String hora;
 
-        ReservacionRegistro(String idEquipo, String matricula, String fecha, String hora) {
-            this.idEquipo = idEquipo;
-            this.matricula = matricula;
-            this.fecha = fecha;
-            this.hora = hora;
+    // ==================== PESTAÑA 8: ENDPOINTS (:8080) ====================
+    private JPanel crearPanelEndpoints() {
+        JPanel contenedor = new JPanel(new BorderLayout(14, 14));
+        contenedor.setBackground(COLOR_FONDO);
+        contenedor.setBorder(new EmptyBorder(12, 8, 8, 8));
+
+        // --- Tarjeta de estado del servidor ---
+        JPanel cardEstado = crearTarjeta("8. Rutas y Endpoints en el Navegador (:" + PUERTO_HTTP + ")");
+        JPanel filaEstado = new JPanel(new BorderLayout(12, 0));
+        filaEstado.setOpaque(false);
+
+        lblEstadoServidor = new JLabel("⏳ Iniciando servidor...");
+        lblEstadoServidor.setFont(new Font("Segoe UI", Font.BOLD, 13));
+        lblEstadoServidor.setForeground(COLOR_ALERTA);
+
+        JButton btnReiniciar = crearBoton("Reiniciar Servidor", COLOR_ALERTA);
+        btnReiniciar.addActionListener(e -> {
+            if (servidorHttp != null) { servidorHttp.stop(0); servidorHttp = null; }
+            iniciarEndpointsLocales(PUERTO_HTTP);
+        });
+
+        filaEstado.add(lblEstadoServidor, BorderLayout.CENTER);
+        filaEstado.add(btnReiniciar, BorderLayout.EAST);
+        cardEstado.add(filaEstado, BorderLayout.CENTER);
+
+        // --- Tarjeta de rutas con botones para abrir en navegador ---
+        JPanel cardRutas = crearTarjeta("Rutas disponibles — haz clic en \"Abrir\" para probarlas en el navegador");
+        JPanel listaRutas = new JPanel();
+        listaRutas.setLayout(new BoxLayout(listaRutas, BoxLayout.Y_AXIS));
+        listaRutas.setOpaque(false);
+
+        String[][] rutas = {
+            {"Listado de equipos",           "http://localhost:" + PUERTO_HTTP + "/api/v1/equipos"},
+            {"Consulta equipo existente",     "http://localhost:" + PUERTO_HTTP + "/api/v1/equipos/EQ-01"},
+            {"Consulta equipo inexistente",   "http://localhost:" + PUERTO_HTTP + "/api/v1/equipos/EQ-99"},
+            {"Listado de reservaciones",      "http://localhost:" + PUERTO_HTTP + "/api/v1/reservaciones"},
+            {"Consulta reservación existente","http://localhost:" + PUERTO_HTTP + "/api/v1/reservaciones/RES-01"},
+            {"Consulta reservación inexistente","http://localhost:" + PUERTO_HTTP + "/api/v1/reservaciones/RES-99"},
+            {"Listado de laboratorios",       "http://localhost:" + PUERTO_HTTP + "/api/v1/laboratorios"},
+            {"Equipos en LAB-PROG",           "http://localhost:" + PUERTO_HTTP + "/api/v1/laboratorios/LAB-PROG"},
+            {"Equipos en LAB-QUIM",           "http://localhost:" + PUERTO_HTTP + "/api/v1/laboratorios/LAB-QUIM"},
+            {"Equipos en LAB-REDES",          "http://localhost:" + PUERTO_HTTP + "/api/v1/laboratorios/LAB-REDES"},
+        };
+
+        for (String[] ruta : rutas) {
+            String etiqueta = ruta[0];
+            String url = ruta[1];
+
+            JPanel fila = new JPanel(new BorderLayout(10, 0));
+            fila.setOpaque(false);
+            fila.setBorder(new EmptyBorder(4, 0, 4, 0));
+            fila.setMaximumSize(new Dimension(Integer.MAX_VALUE, 36));
+
+            JLabel lblEtiqueta = new JLabel("• " + etiqueta + ":");
+            lblEtiqueta.setFont(new Font("Segoe UI", Font.BOLD, 12));
+            lblEtiqueta.setForeground(COLOR_TEXTO);
+            lblEtiqueta.setPreferredSize(new Dimension(220, 24));
+
+            JLabel lblUrl = new JLabel(url);
+            lblUrl.setFont(new Font("Consolas", Font.PLAIN, 12));
+            lblUrl.setForeground(COLOR_ACENTO);
+
+            JButton btnAbrir = crearBoton("Abrir", COLOR_PRIMARIO);
+            btnAbrir.setPreferredSize(new Dimension(80, 28));
+            btnAbrir.addActionListener(e -> {
+                try {
+                    if (Desktop.isDesktopSupported()) {
+                        Desktop.getDesktop().browse(new URI(url));
+                    } else {
+                        JOptionPane.showMessageDialog(this,
+                            "Copia y pega en tu navegador:\n" + url,
+                            "Abrir URL", JOptionPane.INFORMATION_MESSAGE);
+                    }
+                } catch (Exception ex) {
+                    JOptionPane.showMessageDialog(this, "No se pudo abrir: " + ex.getMessage());
+                }
+            });
+
+            fila.add(lblEtiqueta, BorderLayout.WEST);
+            fila.add(lblUrl, BorderLayout.CENTER);
+            fila.add(btnAbrir, BorderLayout.EAST);
+            listaRutas.add(fila);
         }
+
+        cardRutas.add(new JScrollPane(listaRutas), BorderLayout.CENTER);
+
+        // --- Nota informativa ---
+        JPanel cardNota = crearTarjeta("Formato de respuesta JSON");
+        JTextArea areaNota = new JTextArea(
+            "Listado:  { \"recurso\": \"...\", \"generado\": \"...\", \"total\": ..., \"datos\": [...] }\n"
+          + "Por ID:   { \"recurso\": \"...\", \"generado\": \"...\", \"datos\": { ... } }   → código 200\n"
+          + "No existe:{ \"error\": \"El registro no existe.\", \"codigo\": 404 }             → código 404"
+        );
+        areaNota.setEditable(false);
+        areaNota.setFont(new Font("Consolas", Font.PLAIN, 12));
+        areaNota.setBackground(new Color(248, 250, 252));
+        areaNota.setBorder(new EmptyBorder(8, 10, 8, 10));
+        cardNota.add(areaNota, BorderLayout.CENTER);
+
+        contenedor.add(cardEstado, BorderLayout.NORTH);
+        contenedor.add(cardRutas, BorderLayout.CENTER);
+        contenedor.add(cardNota, BorderLayout.SOUTH);
+        return contenedor;
+    }
+
+    private void iniciarEndpointsLocales(int puerto) {
+        try {
+            servidorHttp = HttpServer.create(new InetSocketAddress(puerto), 0);
+
+            // Raíz / índice de rutas
+            servidorHttp.createContext("/", exchange -> {
+                String path = exchange.getRequestURI().getPath();
+                if ("/".equals(path) || "/api".equals(path) || "/api/v1".equals(path) || "/api/v1/".equals(path)) {
+                    JSONObject index = new JSONObject();
+                    index.put("modulo", "Módulo Equipo (Equipo 2) - Laboratorios y Talleres 4DSM2");
+                    index.put("version", "Sprint 2");
+                    index.put("generado", LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME));
+                    JSONArray rutasJson = new JSONArray();
+                    rutasJson.put("http://localhost:" + puerto + "/api/v1/equipos");
+                    rutasJson.put("http://localhost:" + puerto + "/api/v1/reservaciones");
+                    rutasJson.put("http://localhost:" + puerto + "/api/v1/laboratorios");
+                    index.put("rutasDisponibles", rutasJson);
+                    enviarJson(exchange, 200, index.toString(2));
+                } else if (!path.startsWith("/api/v1/equipos")
+                        && !path.startsWith("/api/v1/reservaciones")
+                        && !path.startsWith("/api/v1/laboratorios")) {
+                    JSONObject err = new JSONObject();
+                    err.put("error", "Ruta no encontrada"); err.put("codigo", 404);
+                    enviarJson(exchange, 404, err.toString(2));
+                }
+            });
+
+            // /api/v1/equipos y /api/v1/equipos/{id}
+            servidorHttp.createContext("/api/v1/equipos", exchange -> {
+                String path = exchange.getRequestURI().getPath();
+                String idBuscado = extraerParametroId(path, "/api/v1/equipos");
+                String generado = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                JSONObject respuesta = new JSONObject();
+                if (!idBuscado.isEmpty()) {
+                    Equipo eq = equipos.get(idBuscado);
+                    if (eq == null) eq = arbolEquipos.buscarEquipoPorId(idBuscado);
+                    if (eq != null) {
+                        respuesta.put("recurso", "equipos"); respuesta.put("generado", generado);
+                        respuesta.put("datos", formatearEquipoJson(eq));
+                        enviarJson(exchange, 200, respuesta.toString(2));
+                    } else {
+                        respuesta.put("recurso", "equipos"); respuesta.put("generado", generado);
+                        respuesta.put("error", "El registro no existe.");
+                        respuesta.put("mensaje", "No se encontró ningún equipo con la clave: " + idBuscado);
+                        respuesta.put("codigo", 404);
+                        enviarJson(exchange, 404, respuesta.toString(2));
+                    }
+                } else {
+                    JSONArray lista = new JSONArray();
+                    for (Equipo eq : equipos.values()) lista.put(formatearEquipoJson(eq));
+                    respuesta.put("recurso", "equipos"); respuesta.put("generado", generado);
+                    respuesta.put("total", lista.length()); respuesta.put("datos", lista);
+                    enviarJson(exchange, 200, respuesta.toString(2));
+                }
+            });
+
+            // /api/v1/reservaciones y /api/v1/reservaciones/{id}
+            servidorHttp.createContext("/api/v1/reservaciones", exchange -> {
+                String path = exchange.getRequestURI().getPath();
+                String idBuscado = extraerParametroId(path, "/api/v1/reservaciones");
+                String generado = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                JSONObject respuesta = new JSONObject();
+                if (!idBuscado.isEmpty()) {
+                    Reservacion res = gestorReservaciones.buscarReservacionPorId(idBuscado);
+                    if (res != null) {
+                        respuesta.put("recurso", "reservaciones"); respuesta.put("generado", generado);
+                        respuesta.put("datos", formatearReservacionJson(res));
+                        enviarJson(exchange, 200, respuesta.toString(2));
+                    } else {
+                        respuesta.put("recurso", "reservaciones"); respuesta.put("generado", generado);
+                        respuesta.put("error", "El registro no existe.");
+                        respuesta.put("mensaje", "No se encontró ninguna reservación con la clave: " + idBuscado);
+                        respuesta.put("codigo", 404);
+                        enviarJson(exchange, 404, respuesta.toString(2));
+                    }
+                } else {
+                    JSONArray lista = new JSONArray();
+                    for (Reservacion r : gestorReservaciones.getReservacionesOrdenadas()) lista.put(formatearReservacionJson(r));
+                    respuesta.put("recurso", "reservaciones"); respuesta.put("generado", generado);
+                    respuesta.put("total", lista.length()); respuesta.put("datos", lista);
+                    enviarJson(exchange, 200, respuesta.toString(2));
+                }
+            });
+
+            // /api/v1/laboratorios y /api/v1/laboratorios/{clave}
+            servidorHttp.createContext("/api/v1/laboratorios", exchange -> {
+                String path = exchange.getRequestURI().getPath();
+                String labBuscado = extraerParametroId(path, "/api/v1/laboratorios");
+                String generado = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                JSONObject respuesta = new JSONObject();
+                if (!labBuscado.isEmpty()) {
+                    NodoArbol nodoLab = arbolEquipos.buscarNodoLaboratorio(labBuscado);
+                    if (nodoLab != null) {
+                        JSONArray equiposLab = new JSONArray();
+                        NodoArbol eqActual = nodoLab.getPrimerHijo();
+                        while (eqActual != null) {
+                            if (eqActual.getEquipo() != null) equiposLab.put(formatearEquipoJson(eqActual.getEquipo()));
+                            eqActual = eqActual.getSiguienteHermano();
+                        }
+                        respuesta.put("recurso", "laboratorios"); respuesta.put("generado", generado);
+                        respuesta.put("laboratorio", nodoLab.getNombreClave());
+                        respuesta.put("totalEquipos", equiposLab.length());
+                        respuesta.put("datos", equiposLab);
+                        enviarJson(exchange, 200, respuesta.toString(2));
+                    } else {
+                        respuesta.put("recurso", "laboratorios"); respuesta.put("generado", generado);
+                        respuesta.put("error", "El registro no existe.");
+                        respuesta.put("mensaje", "No se encontró el laboratorio: " + labBuscado);
+                        respuesta.put("codigo", 404);
+                        enviarJson(exchange, 404, respuesta.toString(2));
+                    }
+                } else {
+                    JSONArray lista = new JSONArray();
+                    for (String lab : arbolEquipos.obtenerLaboratorios()) lista.put(lab);
+                    respuesta.put("recurso", "laboratorios"); respuesta.put("generado", generado);
+                    respuesta.put("total", lista.length()); respuesta.put("datos", lista);
+                    enviarJson(exchange, 200, respuesta.toString(2));
+                }
+            });
+
+            servidorHttp.setExecutor(Executors.newFixedThreadPool(4, runnable -> {
+                Thread t = new Thread(runnable);
+                t.setDaemon(true);
+                return t;
+            }));
+            servidorHttp.start();
+
+            // Actualizar etiqueta de estado en el hilo de Swing
+            SwingUtilities.invokeLater(() -> {
+                if (lblEstadoServidor != null) {
+                    lblEstadoServidor.setText("✅ Servidor activo en http://localhost:" + puerto + "/api/v1/...");
+                    lblEstadoServidor.setForeground(COLOR_EXITO);
+                }
+            });
+
+        } catch (IOException e) {
+            SwingUtilities.invokeLater(() -> {
+                if (lblEstadoServidor != null) {
+                    lblEstadoServidor.setText("❌ Puerto " + puerto + " ocupado: " + e.getMessage());
+                    lblEstadoServidor.setForeground(new Color(185, 28, 28));
+                }
+            });
+        }
+    }
+
+    private static String extraerParametroId(String path, String prefijo) {
+        if (path == null) return "";
+        if (path.startsWith(prefijo)) {
+            String resto = path.substring(prefijo.length());
+            if (resto.startsWith("/")) resto = resto.substring(1);
+            if (resto.endsWith("/")) resto = resto.substring(0, resto.length() - 1);
+            return resto.trim();
+        }
+        return "";
+    }
+
+    private JSONObject formatearEquipoJson(Equipo eq) {
+        JSONObject item = new JSONObject();
+        item.put("idEquipo", eq.getIdEquipo());
+        item.put("nombre", eq.getNombre());
+        item.put("laboratorio", eq.getLaboratorio());
+        item.put("ocupado", eq.isOcupado());
+        item.put("alumnoActual", (eq.isOcupado() && eq.getAlumnoActual() != null)
+                ? eq.getAlumnoActual().getNombre() + " (" + eq.getAlumnoActual().getMatricula() + ")"
+                : JSONObject.NULL);
+        ColaEspera<Alumno> cola = colasPorEquipo.get(eq.getIdEquipo());
+        item.put("enEspera", cola != null ? cola.getTamano() : 0);
+        return item;
+    }
+
+    private static JSONObject formatearReservacionJson(Reservacion r) {
+        JSONObject item = new JSONObject();
+        item.put("idReservacion", r.getIdReservacion());
+        item.put("idEquipo", r.getIdEquipo());
+        item.put("matriculaAlumno", r.getMatriculaAlumno());
+        item.put("fecha", r.getFecha());
+        item.put("horaInicio", r.getHoraInicio());
+        item.put("horaFin", r.getHoraFin());
+        return item;
+    }
+
+    private static void enviarJson(HttpExchange exchange, int codigo, String cuerpo) throws IOException {
+        byte[] bytes = cuerpo.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().set("Content-Type", "application/json; charset=UTF-8");
+        exchange.getResponseHeaders().set("Access-Control-Allow-Origin", "*");
+        exchange.sendResponseHeaders(codigo, bytes.length);
+        try (OutputStream os = exchange.getResponseBody()) { os.write(bytes); }
     }
 
     public static void main(String[] args) {
