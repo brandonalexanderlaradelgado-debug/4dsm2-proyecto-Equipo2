@@ -80,6 +80,6 @@ public class Equipo {
         return "Equipo{idEquipo='" + idEquipo + "', nombre='" + nombre
                 + "', laboratorio='" + laboratorio + "', ocupado=" + ocupado
                 + ", alumnoActual=" + (alumnoActual != null ? alumnoActual.getMatricula() : "null")
-                + ", enEspera=" + colaEspera.tamanio() + "}";
+                + ", enEspera=" + colaEspera.getTamano() + "}";
     }
 }

@@ -1,3 +1,6 @@
+import java.util.ArrayList;
+import java.util.List;
+
 /*
  Proyecto D: Laboratorios y talleres (4DSM2)
  Equipo 2 - Módulo: Equipo (HU-D06 - Sprint 2)
@@ -11,6 +14,10 @@ public class ArbolEquipos {
 
     public ArbolEquipos() {
         this.raiz = new NodoArbol("RAIZ", "Sistema de Laboratorios y Talleres");
+    }
+
+    public NodoArbol getRaiz() {
+        return raiz;
     }
 
     // Busca un nodo de laboratorio bajo la raíz; si no existe, devuelve null
@@ -38,21 +45,52 @@ public class ArbolEquipos {
     }
 
     // Inserta un objeto Equipo dentro del nodo de su laboratorio correspondiente
-    public void agregarEquipo(Equipo equipo) {
-        if (equipo == null || equipo.getLaboratorio() == null) return;
-
-        NodoArbol nodoLab = agregarLaboratorio(equipo.getLaboratorio());
-
-        // Evitar duplicar el mismo ID de equipo dentro del laboratorio
-        NodoArbol eqActual = nodoLab.getPrimerHijo();
-        while (eqActual != null) {
-            if (eqActual.getNombreClave().equalsIgnoreCase(equipo.getIdEquipo())) {
-                return;
-            }
-            eqActual = eqActual.getSiguienteHermano();
+    public boolean agregarEquipo(Equipo equipo) {
+        if (equipo == null || equipo.getIdEquipo() == null || equipo.getIdEquipo().trim().isEmpty()
+                || equipo.getLaboratorio() == null || equipo.getLaboratorio().trim().isEmpty()) {
+            return false;
         }
 
+        if (buscarEquipoPorId(equipo.getIdEquipo()) != null) {
+            return false;
+        }
+
+        NodoArbol nodoLab = agregarLaboratorio(equipo.getLaboratorio());
         nodoLab.agregarHijo(new NodoArbol(equipo));
+        return true;
+    }
+
+    public Equipo buscarEquipoPorId(String idEquipo) {
+        if (idEquipo == null || idEquipo.trim().isEmpty()) {
+            return null;
+        }
+
+        NodoArbol labActual = raiz.getPrimerHijo();
+        while (labActual != null) {
+            NodoArbol equipoActual = labActual.getPrimerHijo();
+            while (equipoActual != null) {
+                if (equipoActual.getNombreClave().equalsIgnoreCase(idEquipo.trim())) {
+                    return equipoActual.getEquipo();
+                }
+                equipoActual = equipoActual.getSiguienteHermano();
+            }
+            labActual = labActual.getSiguienteHermano();
+        }
+        return null;
+    }
+
+    public List<Equipo> obtenerTodosLosEquipos() {
+        List<Equipo> equipos = new ArrayList<>();
+        NodoArbol labActual = raiz.getPrimerHijo();
+        while (labActual != null) {
+            NodoArbol equipoActual = labActual.getPrimerHijo();
+            while (equipoActual != null) {
+                equipos.add(equipoActual.getEquipo());
+                equipoActual = equipoActual.getSiguienteHermano();
+            }
+            labActual = labActual.getSiguienteHermano();
+        }
+        return equipos;
     }
 
     // Criterio 1 HU-D06: Listar todo el equipo de un laboratorio específico

@@ -21,13 +21,9 @@ public class GestorReservaciones {
         }
 
         for (Reservacion actual : reservaciones) {
-            boolean mismoEquipo = actual.getIdEquipo().equalsIgnoreCase(nueva.getIdEquipo());
-            boolean mismaFecha = actual.getFecha().equals(nueva.getFecha());
-            boolean mismaHora = actual.getHora().equals(nueva.getHora());
-
-            if (mismoEquipo && mismaFecha && mismaHora) {
+            if (nueva.seEmpalmaCon(actual)) {
                 System.out.println("Error [RN-D04]: El equipo " + nueva.getIdEquipo()
-                        + " ya está reservado el " + nueva.getFecha() + " a las " + nueva.getHora() + ".");
+                        + " ya está reservado el " + nueva.getFecha() + " durante ese horario.");
                 return false;
             }
         }
@@ -59,7 +55,7 @@ public class GestorReservaciones {
         if (cmpFecha != 0) {
             return cmpFecha;
         }
-        return a.getHora().compareTo(b.getHora());
+        return a.getHoraInicio().compareTo(b.getHoraInicio());
     }
 
     public List<Reservacion> getReservacionesOrdenadas() {
@@ -83,10 +79,10 @@ public class GestorReservaciones {
     public static void main(String[] args) {
         GestorReservaciones gestor = new GestorReservaciones();
 
-        gestor.registrarReservacion(new Reservacion("EQ-02", "2526160011", "2026-11-25", "10:00"));
-        gestor.registrarReservacion(new Reservacion("EQ-01", "2526160012", "2026-11-25", "08:00"));
-        gestor.registrarReservacion(new Reservacion("EQ-02", "2526160013", "2026-11-25", "10:00")); // Debe fallar por RN-D04
-        gestor.registrarReservacion(new Reservacion("EQ-02", "2526160014", "2026-11-24", "14:00"));
+        gestor.registrarReservacion(new Reservacion("RES-01", "EQ-02", "2526160011", "2026-11-25", "10:00", "11:00"));
+        gestor.registrarReservacion(new Reservacion("RES-02", "EQ-01", "2526160012", "2026-11-25", "08:00", "09:00"));
+        gestor.registrarReservacion(new Reservacion("RES-03", "EQ-02", "2526160013", "2026-11-25", "10:30", "11:30")); // Debe fallar por RN-D04
+        gestor.registrarReservacion(new Reservacion("RES-04", "EQ-02", "2526160014", "2026-11-24", "14:00", "15:00"));
 
         gestor.mostrarReservaciones();
     }

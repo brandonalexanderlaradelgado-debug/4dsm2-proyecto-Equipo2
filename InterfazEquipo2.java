@@ -145,9 +145,9 @@ public class InterfazEquipo2 extends JFrame {
         sb.append("Estado: ").append(eq.isOcupado() ? "OCUPADO" : "DISPONIBLE").append("\n");
         sb.append("En uso por: ").append(eq.getAlumnoActual() != null ? eq.getAlumnoActual() : "Nadie").append("\n\n");
         sb.append("=== COLA DE ESPERA (FIFO) ===\n");
-        sb.append("Total en espera: ").append(eq.getColaEspera().tamanio()).append("\n");
+        sb.append("Total en espera: ").append(eq.getColaEspera().getTamano()).append("\n");
         if (!eq.getColaEspera().estaVacia()) {
-            sb.append("Siguiente turno: ").append(eq.getColaEspera().frente()).append("\n");
+            sb.append("Siguiente turno: ").append(eq.getColaEspera().verFrente()).append("\n");
         }
         areaEstadoCola.setText(sb.toString());
     }
@@ -224,7 +224,7 @@ public class InterfazEquipo2 extends JFrame {
         DefaultMutableTreeNode rootVisual = new DefaultMutableTreeNode("Sistema de Laboratorios");
         NodoArbol lab = arbolEquipos.getRaiz().getPrimerHijo();
         while (lab != null) {
-            DefaultMutableTreeNode nodoLabVisual = new DefaultMutableTreeNode(lab.getClave());
+            DefaultMutableTreeNode nodoLabVisual = new DefaultMutableTreeNode(lab.getNombreClave());
             NodoArbol eq = lab.getPrimerHijo();
             while (eq != null) {
                 Equipo datos = eq.getEquipo();
